@@ -1,0 +1,22 @@
+{
+  "name": "lecture-transcriber-backend",
+  "private": true,
+  "version": "1.0.0",
+  "engines": { "node": ">=20" },
+  "scripts": {
+    "dev": "vercel dev",
+    "build": "tsc --noEmit",
+    "deploy": "vercel --prod"
+  },
+  "dependencies": {
+    "@supabase/supabase-js": "^2.49.4",
+    "@vercel/node": "^5.1.16",
+    "form-data": "^4.0.2"
+  },
+  "devDependencies": {
+    "@types/form-data": "^2.5.2",
+    "@types/node": "^22.13.10",
+    "typescript": "^5.8.2",
+    "vercel": "^41.2.2"
+  }
+}

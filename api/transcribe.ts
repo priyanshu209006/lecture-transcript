@@ -75,7 +75,7 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
       if (pending?.length) return json(res, 409, { error: 'chunk still processing', sequenceNo: pending[0].sequence_no });
       const { data: transcript, error } = await supabase.rpc('lecture_transcript', { p_session_id: sessionId });
       if (error) throw Object.assign(new Error(error.message), { status: 502 });
-      const { error: updateError } = await supabase.from('lecture_sessions').update({ status: 'finished', finished_at: new Date().toISOString() }).eq('id', sessionId);
+      const { error: updateError } = await supabase.from('lecture_sessions').update({ status: 'finished', finished_at: new Date().toISOString(), complete_transcript: transcript || '' }).eq('id', sessionId);
       if (updateError) throw Object.assign(new Error(updateError.message), { status: 502 });
       return json(res, 200, { sessionId, status: 'finished', transcript });
     }

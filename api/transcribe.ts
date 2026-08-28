@@ -3,6 +3,7 @@ import { createClient } from '@supabase/supabase-js';
 import FormData from 'form-data';
 import { createHash, randomUUID } from 'node:crypto';
 import { createReadStream, createWriteStream, promises as fs } from 'node:fs';
+import { request as httpsRequest } from 'node:https';
 import { pipeline } from 'node:stream/promises';
 
 export const config = { api: { bodyParser: false } };
@@ -35,17 +36,21 @@ async function groqTranscribe(path: string) {
   form.append('response_format', 'json');
   form.append('temperature', '0');
   // Intentionally no language field: Whisper detects Hindi, English, and Hinglish itself.
-  const controller = new AbortController(); const timer = setTimeout(() => controller.abort(), timeoutMs);
-  try {
-    const response = await fetch('https://api.groq.com/openai/v1/audio/transcriptions', {
-      method: 'POST', headers: { Authorization: `Bearer ${env('GROQ_API_KEY')}`, ...form.getHeaders() }, body: form as any, signal: controller.signal
+  const response = await new Promise<{ statusCode: number; body: string }>((resolve, reject) => {
+    const upstream = httpsRequest('https://api.groq.com/openai/v1/audio/transcriptions', {
+      method: 'POST', headers: { Authorization: `Bearer ${env('GROQ_API_KEY')}`, ...form.getHeaders() }
+    }, (upstreamResponse) => {
+      const parts: Buffer[] = [];
+      upstreamResponse.on('data', (part: Buffer) => parts.push(part));
+      upstreamResponse.on('end', () => resolve({ statusCode: upstreamResponse.statusCode || 502, body: Buffer.concat(parts).toString('utf8') }));
     });
-    const raw = await response.text();
-    if (!response.ok) throw Object.assign(new Error(raw.slice(0, 500)), { status: response.status });
-    const parsed = JSON.parse(raw) as { text?: string; x_groq?: { id?: string } };
-    if (typeof parsed.text !== 'string') throw new Error('Groq response omitted text');
-    return { text: parsed.text.trim(), requestId: parsed.x_groq?.id || null };
-  } finally { clearTimeout(timer); }
+    upstream.setTimeout(timeoutMs, () => upstream.destroy(new Error('Groq request timed out')));
+    upstream.on('error', reject); form.on('error', reject); form.pipe(upstream);
+  });
+  if (response.statusCode < 200 || response.statusCode >= 300) throw Object.assign(new Error(response.body.slice(0, 500)), { status: response.statusCode });
+  const parsed = JSON.parse(response.body) as { text?: string; x_groq?: { id?: string } };
+  if (typeof parsed.text !== 'string') throw new Error('Groq response omitted text');
+  return { text: parsed.text.trim(), requestId: parsed.x_groq?.id || null };
 }
 
 export default async function handler(req: VercelRequest, res: VercelResponse) {
